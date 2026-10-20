@@ -155,6 +155,24 @@ async def chat(req:Request,x_jarvis_token:str|None=Header(None)):
     supabase.table('jarvis_cloud_messages').insert([{'device_id':did,'role':'user','content':text},{'device_id':did,'role':'assistant','content':answer}]).execute()
     return {'ok':True,'answer':answer,'model':AI_MODEL}
 
+
+# Compatibility aliases for desktop voice client
+@app.post('/api/chat')
+async def api_chat(req: Request, x_jarvis_token: str | None = Header(None), authorization: str | None = Header(None)):
+    token = x_jarvis_token
+    if not token and authorization and authorization.lower().startswith('bearer '):
+        token = authorization[7:].strip()
+    if not auth(token):
+        return denied()
+    body = await req.json()
+    if 'text' not in body and 'message' in body:
+        body['text'] = body.get('message')
+    # Rebuild a request body compatible with /v1/chat without an internal HTTP hop.
+    class _Req:
+        async def json(self):
+            return body
+    return await chat(_Req(), token)
+
 # ===== V23: rotas, noticias, TTS, memoria pesquisavel e configuracao =====
 from services.maps import route as build_route
 from services.news import headlines
@@ -209,3 +227,12 @@ def get_sentinel_state(device_id:str,x_jarvis_token:str|None=Header(None)):
     if not auth(x_jarvis_token): return denied()
     rows=supabase.table('jarvis_sentinel_state').select('*').eq('device_id',device_id).limit(1).execute().data or []
     return {'ok':True,'state':rows[0] if rows else {'device_id':device_id,'enabled':False,'mode':'motion_face'}}
+
+@app.post('/api/tts')
+async def api_tts(req: Request, x_jarvis_token: str | None = Header(None), authorization: str | None = Header(None)):
+    token = x_jarvis_token
+    if not token and authorization and authorization.lower().startswith('bearer '):
+        token = authorization[7:].strip()
+    if not auth(token):
+        return denied()
+    return await tts(req, token)
